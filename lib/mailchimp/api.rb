@@ -31,7 +31,8 @@ module Mailchimp
       api_url = base_api_url + method
       params = @default_params.merge(params)
       timeout = params.delete(:timeout) || @timeout
-      response = self.class.post(api_url, :body => CGI::escape(params.to_json), :timeout => timeout)
+
+      response = self.class.post(api_url, :body => params, :timeout => timeout)
 
       begin
         response = JSON.parse(response.body)
