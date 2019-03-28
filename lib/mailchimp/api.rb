@@ -9,6 +9,7 @@ module Mailchimp
     def initialize(api_key = nil, extra_params = {})
       @api_key = api_key || ENV['MAILCHIMP_API_KEY'] || self.class.api_key
       @default_params = {:apikey => @api_key}.merge(extra_params)
+      @basic_auth = basic_auth
       @throws_exceptions = false
     end
 
@@ -18,48 +19,34 @@ module Mailchimp
     end
 
     def base_api_url
-      "https://#{dc_from_api_key}api.mailchimp.com/1.3/?method="
+      "https://#{dc_from_api_key}api.mailchimp.com/3.0/"
     end
-    
+
+    def basic_auth
+      { :username => 'apikey', :password => @api_key }
+    end
+
     def valid_api_key?(*args)
       %q{"Everything's Chimpy!"} == call("#{base_api_url}ping")
     end
 
+    def templates(options)
+      self.class.get(base_api_url + "templates", options)
+    end
+
+    def lists(*args)
+      self.class.get(base_api_url + "lists", :basic_auth => basic_auth)
+    end
+
+    def list(*args)
+      self.class.get(base_api_url + "lists/#{args.first.first[:filters][:list_id]}", :basic_auth => basic_auth)
+    end
+
+    def search_members(member)
+      self.class.get(base_api_url + "search-members?query=#{member}", :basic_auth => basic_auth)
+    end
+
     protected
-
-    def call(method, params = {})
-      api_url = base_api_url + method
-      params = @default_params.merge(params)
-      timeout = params.delete(:timeout) || @timeout
-
-      response = self.class.post(api_url, :body => params, :timeout => timeout)
-
-      begin
-        response = JSON.parse(response.body)
-      rescue
-        response = JSON.parse('['+response.body+']').first
-      end
-
-      if @throws_exceptions && response.is_a?(Hash) && response["error"]
-        raise Mailchimp::APIError.new(response['error'],response['code'])
-      end
-
-      response
-    end
-
-    def method_missing(method, *args)
-      method = method.to_s.gsub(/\/(.?)/) { "::#{$1.upcase}" }.gsub(/(?:^|_)(.)/) { $1.upcase } #Thanks for the gsub, Rails
-      method = method[0].chr.downcase + method[1..-1].gsub(/aim$/i, 'AIM')
-      call(method, *args)
-    end
-
-    class << self
-      attr_accessor :api_key
-
-      def method_missing(sym, *args, &block)
-        new(self.api_key).send(sym, *args, &block)
-      end
-    end
 
     def dc_from_api_key
       (@api_key.nil? || @api_key.length == 0 || @api_key !~ /-/) ? '' : "#{@api_key.split("-").last}."
